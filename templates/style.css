@@ -1,0 +1,134 @@
+body { margin:0; background:#000; color:#0f0; font-family: 'Courier New', monospace; overflow:hidden; }
+    #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #000; }
+    
+    /* L'image vidéo doit être clickable */
+    #video { max-width: 100%; max-height: 100%; display: block; cursor: crosshair; }
+
+    /* --- PANNEAUX --- */
+    .panel {
+        position: absolute;
+        top: 10px;
+        bottom: 10px;
+        width: 420px; /* Élargi pour le slider/radar */
+        background: rgba(0,20,0,0.85);
+        backdrop-filter: blur(4px);
+        border: 1px solid #0f0;
+        border-radius: 8px;
+        z-index: 20;
+        transition: transform 0.4s ease;
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    #left-panel { left: 10px; transform: translateX(0); width: 380px; }
+    #left-panel.closed { transform: translateX(-400px); }
+
+    #right-panel { right: 10px; transform: translateX(0); align-items: center; }
+    #right-panel.closed { transform: translateX(440px); }
+
+    .toggle-btn {
+        position: absolute; top: 50%; width: 30px; height: 60px;
+        background: #002200; border: 1px solid #0f0; color: #0f0;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; z-index: 21; font-weight: bold; margin-top: -30px;
+    }
+    #btn-left { right: -31px; border-left: none; border-radius: 0 8px 8px 0; }
+    #btn-right { left: -31px; border-right: none; border-radius: 8px 0 0 8px; }
+
+    input[type="text"], button { padding: 6px; margin: 4px; background: #001100; color: #0f0; border: 1px solid #0f0; }
+    button:hover { background: #004400; cursor: pointer; }
+    
+    .section-title { 
+        background: rgba(0,255,0,0.1); 
+        padding: 5px; margin: 10px 0 5px 0; 
+        text-align: center; font-weight: bold; border-bottom: 1px solid #0f0; 
+        width: 100%;
+    }
+
+    /* Checkboxes */
+    #checkboxes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chk-item { display: flex; align-items: center; cursor: pointer; user-select: none; background: #002200; padding: 4px 8px; border-radius: 4px; }
+    .chk-item input { margin-right: 6px; cursor: pointer; }
+
+    /* Tableau */
+    #tactical-list { flex-grow: 1; overflow-y: auto; font-size: 0.9em; width: 100%; }
+    .track-row { padding: 4px; border-bottom: 1px solid #003300; display: flex; justify-content: space-between; cursor: pointer; }
+    .track-row:hover { background: rgba(0, 255, 0, 0.1); }
+    
+    /* Radar & Logo */
+    #logo-img { max-width: 150px; margin-bottom: 10px; filter: drop-shadow(0 0 5px #0f0); }
+    
+    /* --- NOUVEAU BLOC INFO NAVIRE --- */
+    #ship-info {
+        width: 100%;
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #001100;
+        border: 1px solid #004400;
+        border-radius: 4px;
+        font-size: 0.85em;
+        box-sizing: border-box;
+    }
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+        border-bottom: 1px dashed #003300;
+        padding-bottom: 2px;
+    }
+    .info-row:last-child { border-bottom: none; margin-bottom: 0; }
+    .label { color: #00aa00; font-weight: bold; }
+    .val { color: #0f0; letter-spacing: 1px; }
+
+    /* Animation simple pour le status */
+    @keyframes blinker { 50% { opacity: 0.5; } }
+    .blink { animation: blinker 2s linear infinite; color: #0f0; font-weight:bold; }
+
+    /* Conteneur Radar + Slider */
+    #radar-wrapper {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        margin-top: auto;
+        margin-bottom: 20px;
+    }
+
+    #radar-container {
+        width: 300px; height: 300px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(0,40,0,1) 0%, rgba(0,10,0,1) 100%);
+        border: 2px solid #0f0; position: relative;
+    }
+    canvas { display: block; }
+
+    /* SLIDER VERTICAL */
+    .slider-container {
+        height: 300px;
+        width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        position: relative;
+    }
+    
+    /* On utilise une transformation pour tourner un slider standard */
+    input[type=range].vertical-slider {
+        transform: rotate(-90deg);
+        width: 280px; /* Cela devient la hauteur visuelle une fois tourné */
+        height: 10px;
+        cursor: pointer;
+        background: transparent;
+    }
+    
+    /* Style track/thumb pour un look "militaire" */
+    input[type=range].vertical-slider::-webkit-slider-runnable-track {
+        background: #003300; border: 1px solid #0f0; border-radius: 5px; height: 8px;
+    }
+    input[type=range].vertical-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        background: #0f0; border: 1px solid #fff;
+        height: 16px; width: 16px; margin-top: -5px; border-radius: 50%;
+    }

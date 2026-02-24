@@ -1,0 +1,118 @@
+
+
+body { 
+    margin:0; 
+    background:#08121a; 
+    color:#e6f7ff; 
+    font-family: Arial, Helvetica, sans-serif; 
+}
+
+#container { 
+    position:relative; 
+    width:100vw; 
+    height:100vh; 
+    overflow:hidden; 
+}
+
+#video_wrap { 
+    width:100%; 
+    height:100%; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center; 
+    background:black; 
+}
+
+#video { 
+    max-width:100%; 
+    max-height:100%; 
+    object-fit:contain; 
+    cursor: crosshair; 
+    border: 2px solid #123; 
+    box-shadow: 0 0 12px rgba(0,0,0,0.6); 
+}
+
+#overlay { 
+    position:absolute; 
+    top:10px; 
+    left:10px; 
+    background:rgba(0,0,0,0.6); 
+    padding:10px; 
+    border-radius:8px; 
+    min-width:300px; 
+}
+
+#overlay .row { 
+    display:flex; 
+    gap:8px; 
+    align-items:center; 
+    margin-bottom:6px; 
+}
+
+#overlay input[type=text], #overlay input[type=number] { 
+    padding:6px; 
+    border-radius:4px; 
+    border:1px solid #234; 
+    width:220px; 
+    background:#fff; 
+    color:#000; 
+}
+
+#overlay button { 
+    padding:6px 10px; 
+    border-radius:5px; 
+    border:none; 
+    background:#1c5; 
+    color:#002; 
+    cursor:pointer; 
+    font-weight:bold; 
+}
+
+#overlay button#btnStop { 
+    background:#c44; 
+    color:#fff; 
+}
+
+.box { 
+    margin:4px 0; 
+    cursor:pointer; 
+    user-select:none; 
+    display:flex; 
+    align-items:center; 
+    gap:6px; 
+}
+
+.box input { 
+    margin-right:6px; 
+}
+
+#status { 
+    position:absolute; 
+    bottom:10px; 
+    left:10px; 
+    color:#7fff7f; 
+    font-weight:bold; 
+    background:rgba(0,0,0,0.6); 
+    padding:6px 10px; 
+    border-radius:6px; 
+}
+
+#tactical { 
+    position:absolute; 
+    right:10px; 
+    bottom:10px; 
+    max-width:420px; 
+    background:rgba(0,0,0,0.75); 
+    padding:10px; 
+    border:2px solid #0f0; 
+    border-radius:6px; 
+    font-family:monospace; 
+    font-size:13px; 
+    color:#dff; 
+}
+
+.title { 
+    color:#8fff8f; 
+    font-weight:bold; 
+    margin-bottom:6px; 
+}

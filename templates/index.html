@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>TIPHON C2 NAVAL - V9 (Web)</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="script.js"></script>
+
+</head>
+<body>
+
+<div id="container">
+    <img id="video" src="/video_feed" alt="Flux vidéo">
+
+    <div id="left-panel" class="panel">
+        <div class="toggle-btn" id="btn-left">◄</div>
+        
+        <div class="section-title">CONTRÔLE</div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+            <input id="url" type="text" placeholder="URL Vidéo / Caméra" value="https://www.youtube.com/watch?v=FkGkZ124Qhk">
+            <div style="display:flex; gap:5px;">
+                <button id="btnStart" style="flex:1;">START</button>
+                <button id="btnStop" style="flex:1;">STOP</button>
+            </div>
+        </div>
+
+        <div class="section-title">AFFICHAGE (OVERLAY)</div>
+        <div id="checkboxes">
+            </div>
+
+        <div class="section-title">CIBLES TACTIQUES</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.8em; padding:0 5px; color:#0aff0a;">
+            <span>ID</span><span>CLASSE</span><span>DIST</span><span>VIT</span>
+        </div>
+        <div id="tactical-list"></div>
+        <div id="status-line" style="margin-top:10px; font-size:0.9em; text-align:center;">Prêt</div>
+    </div>
+
+    <div id="right-panel" class="panel">
+        <div class="toggle-btn" id="btn-right">►</div>
+        <img id="logo-img" src="/static/logo.png" alt="LOGO TIPHON" onerror="this.style.display='none'">
+        
+        <div id="ship-info">
+            <div class="info-row">
+                <span class="label">TIME (Z):</span>
+                <span id="clock-zulu" class="val">--:--:--</span>
+            </div>
+            <div class="info-row">
+                <span class="label">POS:</span>
+                <span class="val">43°06'N 005°55'E</span> </div>
+            <div class="info-row">
+                <span class="label">SYS:</span>
+                <span class="val blink">ONLINE</span>
+            </div>
+            <div class="info-row">
+                <span class="label">MODE:</span>
+                <span class="val" style="color:#0ff">AI-TRACKING</span>
+            </div>
+        </div>
+        <div class="section-title">RADAR (Vue dessus)</div>
+        
+        <div id="radar-wrapper">
+            <div class="slider-container">
+                <input type="range" id="zoomSlider" class="vertical-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+
+            <div id="radar-container">
+                <canvas id="radarCanvas" width="300" height="300"></canvas>
+            </div>
+        </div>
+
+        <div style="text-align:center; font-size:0.8em; color:#aaa;">
+            Zoom: <span id="zoomText" style="color:#0f0; font-weight:bold;">1.0</span>x
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+
+# IP et ports
+server_ip: 192.168.10.1
+server_port: 5000
+
+# Chemins des certificats
+cert_file: certs/server.crt
+key_file: certs/server.key
+
+# Réseau
+client_ip: 192.168.10.2
+wifi_ssid: DroneNet
+wifi_password: MotDePasseFort123
+
+# Paramètres chat
+poll_interval: 1  # en secondes, pour récupération messages
