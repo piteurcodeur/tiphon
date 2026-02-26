@@ -8,7 +8,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Charger la config
-with open("config.yaml", "r") as f:
+with open("COM/config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 SERVER_IP = config["server_ip"]        # ex: 10.4.252.55
