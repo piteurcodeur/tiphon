@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jetson Monitor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      background: #13132a;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.2rem; color: #00d4ff; flex: 1; }
+
+    .badge { display: flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 600; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #ff4444; box-shadow: 0 0 6px #ff4444;
+      transition: background .3s, box-shadow .3s;
+    }
+    .dot.on { background: #4eff91; box-shadow: 0 0 8px #4eff91; }
+    .sep { width: 1px; height: 20px; background: #2a2a4a; }
+
+    /* ── Layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Colonne gauche ── */
+    .console-panel {
+      width: 400px; min-width: 280px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      border-right: 1px solid #2a2a4a;
+      background: #0a0a14;
+    }
+    .panel-title {
+      padding: 7px 14px;
+      font-size: .72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: #444; border-bottom: 1px solid #1e1e3a; flex-shrink: 0;
+    }
+    #feed {
+      flex: 1; overflow-y: auto;
+      display: flex; flex-direction: column;
+      padding: 8px 0;
+    }
+    #feed::-webkit-scrollbar { width: 4px; }
+    #feed::-webkit-scrollbar-track { background: transparent; }
+    #feed::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
+
+    .entry {
+      padding: 5px 14px; font-size: .82rem;
+      border-bottom: 1px solid #0f0f20;
+      animation: fadeUp .2s ease; line-height: 1.5; flex-shrink: 0;
+    }
+    .entry:hover { background: #13132a; }
+    .entry .time { color: #444; font-size: .7rem; margin-right: 6px; font-family: monospace; }
+    .entry.type-text  .icon { color: #00d4ff; }
+    .entry.type-image .icon { color: #ff9f43; }
+    .entry.type-info  { opacity: .45; font-style: italic; }
+
+    .thumb-wrap {
+      margin-top: 5px; display: inline-block;
+      cursor: pointer; position: relative;
+    }
+    .thumb-wrap img {
+      display: block; max-width: 100%; max-height: 130px;
+      border-radius: 4px; border: 2px solid #2a2a4a;
+      transition: border-color .2s, opacity .2s;
+    }
+    .thumb-wrap:hover img { border-color: #ff9f43; opacity: .85; }
+    .thumb-wrap::after {
+      content: "🔍"; position: absolute; bottom: 4px; right: 6px;
+      font-size: .8rem; opacity: 0; transition: opacity .2s;
+    }
+    .thumb-wrap:hover::after { opacity: 1; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Colonne droite : viewer pan+zoom ── */
+    .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Zone de rendu — overflow hidden, on gère tout en JS */
+    #viewer-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #0a0a12;
+      /* curseur dynamique via JS */
+    }
+
+    /* Placeholder */
+    #viewer-placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #252540; font-size: .95rem;
+      user-select: none; pointer-events: none;
+    }
+    #viewer-placeholder .big { font-size: 3.5rem; margin-bottom: 10px; }
+
+    /* L'image est positionnée en absolute et déplacée par transform */
+    #viewer-img {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;   /* on applique translate puis scale */
+      display: none;
+      border-radius: 4px;
+      /* pas de transition pour que le drag soit fluide;
+         on l'ajoute seulement pour le fit/reset */
+    }
+    #viewer-img.animate {
+      transition: transform .25s ease;
+    }
+
+    /* Barre zoom */
+    #zoom-bar {
+      position: absolute;
+      bottom: 14px; left: 50%; transform: translateX(-50%);
+      display: none;
+      background: rgba(10,10,20,.88);
+      border: 1px solid #2a2a4a;
+      border-radius: 999px;
+      padding: 5px 14px;
+      gap: 10px;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      z-index: 20;
+      white-space: nowrap;
+    }
+    #zoom-bar button {
+      background: none; border: none; color: #aaa;
+      font-size: 1rem; cursor: pointer; padding: 2px 6px;
+      border-radius: 4px; line-height: 1;
+      transition: color .15s, background .15s;
+    }
+    #zoom-bar button:hover { color: #fff; background: #2a2a4a; }
+    #zoom-level { font-size: .75rem; color: #666; min-width: 40px; text-align: center; }
+    #viewer-label { font-size: .7rem; color: #444; }
+    .zbar-sep { width: 1px; height: 14px; background: #2a2a4a; display: inline-block; }
+
+    /* Hint drag */
+    #drag-hint {
+      position: absolute; top: 10px; right: 14px;
+      font-size: .68rem; color: #2a2a4a;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📡 Jetson Monitor</h1>
+    <div class="badge">
+      <div class="dot" id="dot-server"></div>
+      <span id="label-server">Serveur déconnecté</span>
+    </div>
+    <div class="sep"></div>
+    <div class="badge">
+      <div class="dot" id="dot-jetson"></div>
+      <span id="label-jetson">Jetson déconnectée</span>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- Colonne gauche -->
+    <div class="console-panel">
+      <div class="panel-title">📥 Messages reçus</div>
+      <div id="feed"></div>
+    </div>
+
+    <!-- Colonne droite -->
+    <div class="right-panel">
+      <div class="panel-title" id="right-title">🔲 Zone libre</div>
+
+      <div id="viewer-area">
+        <div id="viewer-placeholder">
+          <span class="big">🖼️</span>
+          Cliquez sur une image<br>pour l'afficher ici
+        </div>
+
+        <img id="viewer-img" alt="Image Jetson" />
+
+        <div id="zoom-bar">
+          <button id="btn-zoom-out" title="Zoom arrière (−)">−</button>
+          <span id="zoom-level">100%</span>
+          <button id="btn-zoom-in"  title="Zoom avant (+)">+</button>
+          <span class="zbar-sep"></span>
+          <button id="btn-zoom-fit" title="Ajuster à l'écran">⊡</button>
+          <button id="btn-zoom-100" title="Taille réelle 1:1">1:1</button>
+          <span class="zbar-sep"></span>
+          <span id="viewer-label"></span>
+        </div>
+
+        <div id="drag-hint">🖱 glisser pour déplacer · molette pour zoomer</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ════════════════════════════════════════════════════════
+       DOM
+    ════════════════════════════════════════════════════════ */
+    const feed          = document.getElementById("feed");
+    const dotServer     = document.getElementById("dot-server");
+    const labelServer   = document.getElementById("label-server");
+    const dotJetson     = document.getElementById("dot-jetson");
+    const labelJetson   = document.getElementById("label-jetson");
+    const rightTitle    = document.getElementById("right-title");
+    const viewerPH      = document.getElementById("viewer-placeholder");
+    const viewerArea    = document.getElementById("viewer-area");
+    const viewerImg     = document.getElementById("viewer-img");
+    const zoomBar       = document.getElementById("zoom-bar");
+    const zoomLevelEl   = document.getElementById("zoom-level");
+    const viewerLabel   = document.getElementById("viewer-label");
+    const dragHint      = document.getElementById("drag-hint");
+
+    /* ════════════════════════════════════════════════════════
+       PAN + ZOOM
+       On maintient (tx, ty, scale) et on applique :
+         transform: translate(tx px, ty px) scale(scale)
+       L'origine de scale est 0,0 de l'image, donc pour zoomer
+       vers le pointeur on recalcule tx/ty.
+    ════════════════════════════════════════════════════════ */
+    let tx = 0, ty = 0, scale = 1;
+    let imgW = 0, imgH = 0;           // dimensions naturelles de l'image
+    let hasImage = false;
+
+    const SCALE_MIN  = 0.05;
+    const SCALE_MAX  = 20;
+    const SCALE_STEP = 0.15;          // pas molette (multiplicatif)
+
+    function applyTransform(animate = false) {
+      if (animate) {
+        viewerImg.classList.add("animate");
+        setTimeout(() => viewerImg.classList.remove("animate"), 280);
+      } else {
+        viewerImg.classList.remove("animate");
+      }
+      viewerImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      zoomLevelEl.textContent   = Math.round(scale * 100) + "%";
+    }
+
+    /** Recadre pour que l'image reste partiellement visible */
+    function clampTranslate() {
+      const aW = viewerArea.clientWidth;
+      const aH = viewerArea.clientHeight;
+      const iW = imgW * scale;
+      const iH = imgH * scale;
+      const margin = 60;                     // px minimum visible
+      tx = Math.min(tx, aW - margin);
+      tx = Math.max(tx, margin - iW);
+      ty = Math.min(ty, aH - margin);
+      ty = Math.max(ty, margin - iH);
+    }
+
+    /** Adapte l'image à la zone (fit), centré, avec transition */
+    function fitToArea(animate = true) {
+      if (!hasImage) return;
+      const aW = viewerArea.clientWidth;
+      const aH = viewerArea.clientHeight;
+      scale = Math.min(aW / imgW, aH / imgH, 1); // jamais agrandir au delà de 1x au fit
+      tx = (aW - imgW * scale) / 2;
+      ty = (aH - imgH * scale) / 2;
+      applyTransform(animate);
+    }
+
+    /** Zoom centré sur un point (cx, cy) dans les coords de la zone */
+    function zoomAt(cx, cy, factor) {
+      const newScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale * factor));
+      const ratio    = newScale / scale;
+      tx = cx - ratio * (cx - tx);
+      ty = cy - ratio * (cy - ty);
+      scale = newScale;
+      clampTranslate();
+      applyTransform();
+    }
+
+    /* ── Molette ── */
+    viewerArea.addEventListener("wheel", (e) => {
+      if (!hasImage) return;
+      e.preventDefault();
+      const rect   = viewerArea.getBoundingClientRect();
+      const cx     = e.clientX - rect.left;
+      const cy     = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? (1 + SCALE_STEP) : (1 - SCALE_STEP);
+      zoomAt(cx, cy, factor);
+    }, { passive: false });
+
+    /* ── Drag (pan) ── */
+    let dragging = false;
+    let dragStartX, dragStartY, dragTx, dragTy;
+
+    viewerArea.addEventListener("mousedown", (e) => {
+      if (!hasImage || e.button !== 0) return;
+      dragging   = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragTx     = tx;
+      dragTy     = ty;
+      viewerArea.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      tx = dragTx + (e.clientX - dragStartX);
+      ty = dragTy + (e.clientY - dragStartY);
+      clampTranslate();
+      applyTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      viewerArea.style.cursor = "grab";
+    });
+
+    /* ── Double-clic : toggle fit ↔ 2× centré sur le clic ── */
+    viewerArea.addEventListener("dblclick", (e) => {
+      if (!hasImage) return;
+      const rect = viewerArea.getBoundingClientRect();
+      const cx   = e.clientX - rect.left;
+      const cy   = e.clientY - rect.top;
+      if (scale > 1.05) {
+        fitToArea(true);
+      } else {
+        zoomAt(cx, cy, 2.5 / scale);
+      }
+    });
+
+    /* ── Boutons barre ── */
+    document.getElementById("btn-zoom-in").addEventListener("click", () => {
+      const cx = viewerArea.clientWidth  / 2;
+      const cy = viewerArea.clientHeight / 2;
+      zoomAt(cx, cy, 1 + SCALE_STEP * 2);
+    });
+    document.getElementById("btn-zoom-out").addEventListener("click", () => {
+      const cx = viewerArea.clientWidth  / 2;
+      const cy = viewerArea.clientHeight / 2;
+      zoomAt(cx, cy, 1 - SCALE_STEP * 2);
+    });
+    document.getElementById("btn-zoom-fit").addEventListener("click", () => fitToArea(true));
+    document.getElementById("btn-zoom-100").addEventListener("click", () => {
+      const cx = viewerArea.clientWidth  / 2;
+      const cy = viewerArea.clientHeight / 2;
+      // centrer l'image à 100%
+      scale = 1;
+      tx    = cx - imgW / 2;
+      ty    = cy - imgH / 2;
+      applyTransform(true);
+    });
+
+    /* ── Recalcul au resize fenêtre ── */
+    window.addEventListener("resize", () => { if (hasImage) fitToArea(false); });
+
+    /* ════════════════════════════════════════════════════════
+       AFFICHER UNE IMAGE
+    ════════════════════════════════════════════════════════ */
+    function showInViewer(b64, label) {
+      const img = new Image();
+      img.onload = () => {
+        imgW = img.naturalWidth;
+        imgH = img.naturalHeight;
+
+        viewerImg.src          = img.src;
+        viewerImg.style.width  = imgW + "px";
+        viewerImg.style.height = imgH + "px";
+        viewerImg.style.display = "block";
+        hasImage = true;
+
+        viewerPH.style.display  = "none";
+        zoomBar.style.display   = "flex";
+        dragHint.style.display  = "block";
+        viewerArea.style.cursor = "grab";
+        viewerLabel.textContent = label;
+        rightTitle.textContent  = "🖼️ Dernière image reçue";
+
+        fitToArea(true);
+      };
+      img.src = "data:image/jpeg;base64," + b64;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       VOYANT JETSON
+    ════════════════════════════════════════════════════════ */
+    function setJetsonStatus(connected) {
+      dotJetson.classList.toggle("on", connected);
+      labelJetson.textContent = connected ? "Jetson connectée" : "Jetson déconnectée";
+    }
+
+    /* ════════════════════════════════════════════════════════
+       FEED
+    ════════════════════════════════════════════════════════ */
+    function escHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function addEntry(type, text, imgB64 = null) {
+      const div  = document.createElement("div");
+      div.className = `entry type-${type}`;
+      const time = new Date().toLocaleTimeString("fr-FR", { hour12: false });
+      const icon = type === "text" ? "💬" : type === "image" ? "🖼️" : "ℹ️";
+
+      const line = document.createElement("div");
+      line.innerHTML = `<span class="time">${time}</span><span class="icon">${icon}</span> ${escHtml(text)}`;
+      div.appendChild(line);
+
+      if (imgB64) {
+        const label = `Reçue à ${time}`;
+        const wrap  = document.createElement("div");
+        wrap.className = "thumb-wrap";
+        wrap.title     = "Cliquer pour afficher";
+        const img = document.createElement("img");
+        img.src = "data:image/jpeg;base64," + imgB64;
+        wrap.appendChild(img);
+        wrap.addEventListener("click", () => showInViewer(imgB64, label));
+        div.appendChild(wrap);
+      }
+
+      feed.appendChild(div);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       WEBSOCKET
+    ════════════════════════════════════════════════════════ */
+    function connect() {
+      const ws = new WebSocket(`ws://${location.host}`);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ role: "browser" }));
+        dotServer.classList.add("on");
+        labelServer.textContent = "Serveur connecté";
+      };
+
+      ws.onmessage = ({ data }) => {
+        let msg;
+        try { msg = JSON.parse(data); } catch { return; }
+        if (msg.type === "text")          addEntry("text",  msg.text);
+        if (msg.type === "image")         addEntry("image", "Image reçue", msg.data);
+        if (msg.type === "info")          addEntry("info",  msg.text);
+        if (msg.type === "jetson_status") setJetsonStatus(msg.connected);
+      };
+
+      ws.onclose = () => {
+        dotServer.classList.remove("on");
+        labelServer.textContent = "Serveur déconnecté";
+        setJetsonStatus(false);
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (e) => console.error("[WS error]", e);
+    }
+
+    connect();
+  </script>
+</body>
+</html>
