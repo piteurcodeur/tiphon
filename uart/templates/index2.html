@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Jetson Control Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0c10; --panel: #0f1318; --border: #1e2a38;
+            --accent: #00d4ff; --accent2: #00ff9d; --warn: #ff6b35;
+            --text: #c8d8e8; --dim: #4a6070;
+            --font-mono: 'Share Tech Mono', monospace;
+            --font-ui: 'Rajdhani', sans-serif;
+        }
+        body { font-family: var(--font-ui); background: var(--bg); color: var(--text); height: 100vh; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-bottom: 1px solid var(--border); background: var(--panel); z-index: 10; }
+        header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); text-shadow: 0 0 20px rgba(0,212,255,0.4); }
+        #conn-status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; letter-spacing: 1px; color: var(--dim); }
+        #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4040; box-shadow: 0 0 8px #ff4040; transition: all 0.3s; }
+        #conn-dot.on { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+        main { display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+        #console-panel {
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            background: var(--panel);
+            min-height: 0;
+        }
+        .panel-title { font-size: 0.7rem; letter-spacing: 3px; text-transform: uppercase; color: var(--dim); padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+        .panel-title::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--accent); clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+        #terminal {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            line-height: 1.7;
+            min-height: 0;
+        }
+        #terminal::-webkit-scrollbar { width: 4px; }
+        #terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .log-line { display: flex; gap: 8px; animation: fadeIn 0.2s ease; }
+        .log-time { color: var(--dim); flex-shrink: 0; }
+        .log-in { color: var(--accent2); }
+        .log-out { color: var(--warn); }
+        .log-sys { color: var(--dim); font-style: italic; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+        #viewer-panel { display: flex; flex-direction: column; background: #080b0f; overflow: hidden; position: relative; }
+        #viewer-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+        .tb-btn { background: none; border: 1px solid var(--border); color: var(--text); font-family: var(--font-ui); font-size: 0.8rem; font-weight: 600; letter-spacing: 1px; padding: 5px 12px; border-radius: 3px; cursor: pointer; transition: all 0.15s; }
+        .tb-btn:hover { border-color: var(--accent); color: var(--accent); }
+        #zoom-display { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); min-width: 50px; text-align: center; }
+        .tb-sep { width: 1px; height: 20px; background: var(--border); }
+        #canvas-zone { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+        #canvas-zone.dragging { cursor: grabbing; }
+        #canvas-zone.no-image { cursor: default; }
+        #img-container { position: absolute; transform-origin: 0 0; will-change: transform; }
+        #jetson_image { display: block; max-width: none; user-select: none; -webkit-user-drag: none; }
+        #placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--dim); }
+        #placeholder svg { opacity: 0.3; }
+        #placeholder p { font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; }
+        #viewer-panel::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); pointer-events: none; z-index: 2; }
+        footer { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+        .prompt-label { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); flex-shrink: 0; }
+        #cmd { flex: 1; background: #080b0f; border: 1px solid var(--border); border-radius: 3px; padding: 10px 14px; color: var(--text); font-family: var(--font-mono); font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+        #cmd:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,212,255,0.1); }
+        #cmd::placeholder { color: var(--dim); }
+        #send-btn { background: var(--accent); color: #000; border: none; border-radius: 3px; padding: 10px 22px; font-family: var(--font-ui); font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+        #send-btn:hover { background: #33ddff; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
+
+        #quit-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--warn);
+            font-family: var(--font-ui);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 6px 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        #quit-btn:hover {
+            border-color: var(--warn);
+            background: rgba(255,107,53,0.08);
+            box-shadow: 0 0 10px rgba(255,107,53,0.35);
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>&#x2B21; TIPHON &mdash; Control Panel</h1>
+    <div style="display:flex; align-items:center; gap:16px;">
+        <div id="conn-status">
+            <div id="conn-dot"></div>
+            <span id="conn-label">DISCONNECTED</span>
+        </div>
+        <button id="quit-btn" onclick="quitApp()">Quitter</button>
+    </div>
+</header>
+<main>
+    <div id="console-panel">
+        <div class="panel-title">Console système</div>
+        <div id="terminal"></div>
+    </div>
+    <div id="viewer-panel">
+        <div class="panel-title" style="border-right:none;">
+            Aperçu image
+            <span id="img-info" style="margin-left:auto;font-size:0.7rem;color:var(--dim);letter-spacing:1px;"></span>
+        </div>
+        <div id="viewer-toolbar">
+            <button class="tb-btn" onclick="zoomIn()">＋ Zoom</button>
+            <span id="zoom-display">100%</span>
+            <button class="tb-btn" onclick="zoomOut()">－ Zoom</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="resetView()">&#x21BA; Reset</button>
+            <button class="tb-btn" onclick="fitToView()">&#x229F; Ajuster</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="downloadImage()">&#x2193; Sauver</button>
+        </div>
+        <div id="canvas-zone" class="no-image">
+            <div id="img-container">
+                <img id="jetson_image" alt="Jetson Feed" style="display:none;">
+            </div>
+            <div id="placeholder">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="12" width="56" height="40" rx="3" stroke="#4a6070" stroke-width="2"/>
+                    <circle cx="22" cy="26" r="6" stroke="#4a6070" stroke-width="2"/>
+                    <path d="M4 44 L18 30 L28 42 L38 32 L60 52" stroke="#4a6070" stroke-width="2" stroke-linejoin="round"/>
+                </svg>
+                <p>En attente d'une image</p>
+            </div>
+        </div>
+    </div>
+</main>
+<footer>
+    <span class="prompt-label">&#x276F;_</span>
+    <input type="text" id="cmd" placeholder="Entrer une commande  (ex: PHOTO, LED_ON, STATUS...)">
+    <button id="send-btn" onclick="send()">Envoyer</button>
+</footer>
+<script>
+    var socket = io({ transports: ['websocket', 'polling'] });
+    var terminal = document.getElementById('terminal');
+    var connDot = document.getElementById('conn-dot');
+    var connLabel = document.getElementById('conn-label');
+    function now() { return new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+    function log(text, type) {
+        type = type || 'in';
+
+        var line = document.createElement('div');
+        line.className = 'log-line';
+
+        line.innerHTML =
+            '<span class="log-time">' + now() + '</span>' +
+            '<span class="log-' + type + '">' + text + '</span>';
+
+        terminal.appendChild(line);
+
+        // force le scroll vers le bas
+        requestAnimationFrame(function () {
+            terminal.scrollTop = terminal.scrollHeight;
+        });
+    }
+    socket.on('connect', function() { connDot.classList.add('on'); connLabel.textContent = 'CONNECTED'; log('Connexion établie avec le serveur', 'sys'); });
+    socket.on('disconnect', function() { connDot.classList.remove('on'); connLabel.textContent = 'DISCONNECTED'; log('Connexion perdue', 'sys'); });
+    socket.on('new_text', function(msg) { log('&gt; ' + msg.data, 'in'); });
+    socket.on('new_image', function(msg) {
+        log('Image reçue (' + Math.round(msg.data.length * 0.75 / 1024) + ' Ko)', 'sys');
+        loadImage('data:image/jpeg;base64,' + msg.data);
+    });
+    function send() {
+        var val = document.getElementById('cmd').value.trim();
+        if (!val) return;
+        socket.emit('send_cmd', {command: val});
+        log('&lt; ' + val, 'out');
+        document.getElementById('cmd').value = '';
+    }
+    document.getElementById('cmd').addEventListener('keydown', function(e) { if (e.key === 'Enter') send(); });
+
+    var zone = document.getElementById('canvas-zone');
+    var container = document.getElementById('img-container');
+    var img = document.getElementById('jetson_image');
+    var placeholder = document.getElementById('placeholder');
+    var zoomDisplay = document.getElementById('zoom-display');
+    var imgInfo = document.getElementById('img-info');
+    var scale = 1, offsetX = 0, offsetY = 0, hasImage = false, lastImgSrc = null;
+
+    function applyTransform() {
+        container.style.transform = 'translate(' + offsetX + 'px,' + offsetY + 'px) scale(' + scale + ')';
+        zoomDisplay.textContent = Math.round(scale * 100) + '%';
+    }
+    function loadImage(src) {
+        lastImgSrc = src;
+        img.onload = function() {
+            hasImage = true; placeholder.style.display = 'none'; img.style.display = 'block';
+            zone.classList.remove('no-image');
+            imgInfo.textContent = img.naturalWidth + ' x ' + img.naturalHeight + ' px';
+            fitToView();
+        };
+        img.src = src;
+    }
+    function fitToView() {
+        if (!hasImage) return;
+        scale = Math.min(zone.clientWidth / img.naturalWidth, zone.clientHeight / img.naturalHeight) * 0.92;
+        offsetX = (zone.clientWidth - img.naturalWidth * scale) / 2;
+        offsetY = (zone.clientHeight - img.naturalHeight * scale) / 2;
+        applyTransform();
+    }
+    function resetView() {
+        if (!hasImage) return;
+        scale = 1; offsetX = (zone.clientWidth - img.naturalWidth) / 2; offsetY = (zone.clientHeight - img.naturalHeight) / 2;
+        applyTransform();
+    }
+    function zoomIn() { applyZoom(1.25, zone.clientWidth/2, zone.clientHeight/2); }
+    function zoomOut() { applyZoom(0.8, zone.clientWidth/2, zone.clientHeight/2); }
+    function applyZoom(factor, cx, cy) {
+        if (!hasImage) return;
+        var newScale = Math.min(Math.max(scale * factor, 0.05), 30);
+        var ratio = newScale / scale;
+        offsetX = cx - (cx - offsetX) * ratio; offsetY = cy - (cy - offsetY) * ratio;
+        scale = newScale; applyTransform();
+    }
+    zone.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var rect = zone.getBoundingClientRect();
+        applyZoom(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
+    }, { passive: false });
+    var isDragging = false, dragStartX, dragStartY, startOffsetX, startOffsetY;
+    zone.addEventListener('mousedown', function(e) {
+        if (!hasImage) return;
+        isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+        startOffsetX = offsetX; startOffsetY = offsetY; zone.classList.add('dragging');
+    });
+    window.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        offsetX = startOffsetX + (e.clientX - dragStartX); offsetY = startOffsetY + (e.clientY - dragStartY);
+        applyTransform();
+    });
+    window.addEventListener('mouseup', function() { isDragging = false; if (hasImage) zone.classList.remove('dragging'); });
+    var touches = {}, lastPinchDist = null;
+    zone.addEventListener('touchstart', function(e) {
+        Array.from(e.changedTouches).forEach(function(t) { touches[t.identifier] = t; });
+        if (Object.keys(touches).length === 1) {
+            var t = e.changedTouches[0]; isDragging = true;
+            dragStartX = t.clientX; dragStartY = t.clientY; startOffsetX = offsetX; startOffsetY = offsetY;
+        }
+    }, { passive: true });
+    zone.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        Array.from(e.changedTouches).forEach(function(t) { touches[t.identifier] = t; });
+        var tArr = Object.values(touches);
+        if (tArr.length === 2) {
+            isDragging = false;
+            var dx = tArr[0].clientX - tArr[1].clientX, dy = tArr[0].clientY - tArr[1].clientY;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            var rect = zone.getBoundingClientRect();
+            var cx = (tArr[0].clientX + tArr[1].clientX)/2 - rect.left;
+            var cy = (tArr[0].clientY + tArr[1].clientY)/2 - rect.top;
+            if (lastPinchDist) applyZoom(dist / lastPinchDist, cx, cy);
+            lastPinchDist = dist;
+        } else if (tArr.length === 1 && isDragging) {
+            var t = e.changedTouches[0];
+            offsetX = startOffsetX + (t.clientX - dragStartX); offsetY = startOffsetY + (t.clientY - dragStartY);
+            applyTransform();
+        }
+    }, { passive: false });
+    zone.addEventListener('touchend', function(e) {
+        Array.from(e.changedTouches).forEach(function(t) { delete touches[t.identifier]; });
+        lastPinchDist = null; if (Object.keys(touches).length === 0) isDragging = false;
+    }, { passive: true });
+    zone.addEventListener('dblclick', function(e) { e.preventDefault(); fitToView(); });
+    function downloadImage() {
+        if (!lastImgSrc) return;
+        var a = document.createElement('a'); a.href = lastImgSrc; a.download = 'jetson_' + Date.now() + '.jpg'; a.click();
+    }
+    window.addEventListener('resize', function() { if (hasImage) fitToView(); });
+    log('Système prêt — en attente de connexion ESP32', 'sys');
+
+    function quitApp() {
+        fetch('/quit', { method: 'POST' });
+
+        setTimeout(function() {
+            window.open('', '_self');
+            window.close();
+        }, 300);
+    }
+</script>
+</body>
+</html>
